@@ -1,0 +1,154 @@
+# application.yaml — Configuracao base (PostgreSQL para docker, H2 para testes)
+# Perfil ativo determina o banco de dados usado.
+
+server:
+  port: ${APP_PORT:8080}
+
+spring:
+  threads:
+    virtual:
+      enabled: true
+  application:
+    name: transporte-api
+  # ===== DEFAULT PROFILE (docker) — PostgreSQL =====
+  datasource:
+    url: jdbc:postgresql://localhost:5432/${POSTGRES_DB:transporte_db}
+    username: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD:postgres123}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 20000
+      pool-name: HikariCP
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          batch_size: 20
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 0
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      batch-size: 16384
+      properties:
+        linger-ms: 10
+        spring.json.add.type.headers: false
+    consumer:
+      group-id: balancas-consumer-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      max-poll-records: 500
+      properties:
+        spring.json.trusted.packages: "*"
+        spring.json.value.default.type: "transporte.desafio.application.dto.PesagemEvent"
+        spring.json.use.type.headers: false
+
+# ===== Profiles =====
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+  datasource:
+    url: jdbc:postgresql://postgres:5432/${POSTGRES_DB:transporte_db}
+
+---
+spring:
+  config:
+    activate:
+      on-profile: test
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=PostgreSQL;DATABASE_TO_UPPER=false;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: none
+    database-platform: org.hibernate.dialect.H2Dialect
+    properties:
+      hibernate:
+        format_sql: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  kafka:
+    bootstrap-servers: localhost:9092
+  sql:
+    init:
+      mode: never
+
+# ===== App Properties =====
+app:
+  balance-token: ${BALANCE_TOKEN:balanca-dev-token}
+  balance-topic: "pesagens"
+  security:
+    jwt:
+      secret: ${JWT_SECRET:chave-desenvolvimento-transporte-2026}
+      expiration-ms: 28800000
+  stabilization:
+    window-readings: 5
+    max-delta-kg: 5.0
+    min-interval-ms: 2000
+  margin:
+    min: 0.05
+    max: 0.20
+
+logging:
+  level:
+    root: INFO
+    org.springframework.kafka: INFO
+    org.hibernate.SQL: DEBUG
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+# ===== Actuator =====
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,kafka
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  metrics:
+    enable:
+      kafka: true
+      jvm: true
+      process: true
+      system: true
+    distribution:
+      percentiles-histogram:
+        kafka: true
+
+# ===== OpenTelemetry =====
+otel:
+  traces:
+    exporter: otlp
+  metrics:
+    exporter: otlp

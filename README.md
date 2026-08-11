@@ -19,8 +19,11 @@ Clean Architecture (Ports e Adapters):
 - **JWT** para autenticação (endpoints administrativos / relatórios)
 - **Micrometer + OpenTelemetry** para observabilidade
 
-## 📦 Pré-requisitos
+## 🤖 Documentação Adicional
 
+- [uso de IA no projeto](readme2.md)
+
+## 📦 Pré-requisitos
 - Java 21+
 - Maven 3.9+
 - Docker e Docker Compose

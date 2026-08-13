@@ -2,14 +2,14 @@
 
 Sistema de ingestão e controle de pesagem de grãos com arquitetura baseada em eventos.
 
-## 🏛️ Arquitetura
+## Arquitetura
 
 Clean Architecture (Ports e Adapters):
 - **Domain**: Entidades puras, enums, exceções e serviços de domínio
 - **Application**: Use Cases, DTOs, ports (in/out)
 - **Adapters**: Controllers REST, Consumers Kafka, Repositories JPA
 
-## 🚀 Tecnologias
+## Tecnologias
 
 - **Java 21** com Virtual Threads
 - **Spring Boot 4.x** com Clean Architecture
@@ -19,16 +19,16 @@ Clean Architecture (Ports e Adapters):
 - **JWT** para autenticação (endpoints administrativos / relatórios)
 - **Micrometer + OpenTelemetry** para observabilidade
 
-## 🤖 Documentação Adicional
+## Documentação Adicional
 
 - [uso de IA no projeto](readme2.md)
 
-## 📦 Pré-requisitos
+## Pré-requisitos
 - Java 21+
 - Maven 3.9+
 - Docker e Docker Compose
 
-## ⚙️ Configuração
+## Configuração
 
 1. Clone o repositório
 2. Copie o arquivo `.env.example` para `.env`
@@ -38,7 +38,7 @@ Clean Architecture (Ports e Adapters):
 cp .env.example .env
 ```
 
-## 🐳 Executando com Docker Compose
+## Executando com Docker Compose
 
 ```bash
 # Subir todos os serviços (PostgreSQL, Kafka, App)
@@ -51,7 +51,7 @@ docker-compose logs -f application
 docker-compose down
 ```
 
-## 💻 Executando Localmente
+## Executando Localmente
 
 1. Suba PostgreSQL e Kafka:
 ```bash
@@ -68,17 +68,17 @@ mvn spring-boot:run
 - Swagger UI: http://localhost:8080/swagger-ui.html
 - Actuator: http://localhost:8080/actuator
 
-## 🧪 Testes
+## Testes
 
 ```bash
 # Todos os testes
 mvn test
 
 # Testes específicos
-mvn test -Dtest=AlgoritmoEstabilizacaoTest
+mvn test -Dtest=WeightStabilizationServiceTest
 ```
 
-## 📌 Endpoints Principais
+## Endpoints Principais
 
 ### Balanças (Ingestão IoT)
 - `POST /api/v1/balanca/leitura` - Receber leituras de peso (Autenticado via token da balança)
@@ -90,7 +90,7 @@ mvn test -Dtest=AlgoritmoEstabilizacaoTest
 ### Relatórios e Estoque
 - `GET /api/v1/doca/relatorio` - Relatório de estoque e margem (Protegido por JWT)
 
-## 📂 Estrutura do Projeto
+## Estrutura do Projeto
 
 ```
 src/main/java/transporte/desafio/
@@ -115,7 +115,7 @@ src/main/java/transporte/desafio/
 +-- tools/                  # Ferramentas auxiliares
 ```
 
-## 🔐 Autenticação e Segurança
+## Autenticação e Segurança
 
 ### 1. Balanças (ESP32 / IoT)
 - Autenticação por token/senha da balança validada por requisição (ou header de credencial da balança cadastrada).
@@ -126,7 +126,7 @@ src/main/java/transporte/desafio/
 - O sistema valida tokens JWT assinados com a chave secreta configurada (`APP_SECURITY_JWT_SECRET` / `JWT_SECRET`).
 - *Nota*: A tabela e o cadastro de usuários (`Usuario`) foram removidos do escopo da aplicação; a autenticação JWT valida o token gerado para acesso aos endpoints protegidos.
 
-### 🔑 Gerar Token JWT (Exemplo prático via jwt.io)
+### Gerar Token JWT (Exemplo prático via jwt.io)
 Para acessar endpoints administrativos protegidos por JWT, você pode gerar um token de teste rapidamente no site [jwt.io](https://jwt.io/):
 
 1. Acesse **[jwt.io](https://jwt.io/)**.
@@ -154,19 +154,19 @@ Para acessar endpoints administrativos protegidos por JWT, você pode gerar um t
    ```
 
 
-## 🗄️ Migrations
+## Migrations
 
 As migrations Flyway estão em `src/main/resources/db/migration/`:
 - `V1__create_tables.sql` - Criação do schema (Filial, TipoGrao, Caminhao, Balanca, TransacaoTransporte, Doca, Pesagem)
 
-## 📊 Monitoramento
+## Monitoramento
 
 - **Health Checks**: `/actuator/health`
 - **Metrics**: `/actuator/metrics`
 - **Prometheus**: `/actuator/prometheus`
 - **Kafka**: `/actuator/kafka`
 
-## 📄 Licença
+## Licença
 
 Projeto privado - Sistema de Pesagem de Grãos
 

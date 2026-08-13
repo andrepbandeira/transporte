@@ -101,6 +101,17 @@
             <version>3.0.2</version>
         </dependency>
 
+        <!-- ===== Cache (Caffeine) ===== -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-cache</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+            <version>3.2.4</version>
+        </dependency>
+
         <!-- ===== Observability ===== -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

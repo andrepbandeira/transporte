@@ -1,4 +1,4 @@
-# 🌾 Desenvolvimento Assistido por IA — Sistema de Ingestão e Balanças de Grãos
+# Desenvolvimento Assistido por IA — Sistema de Ingestão e Balanças de Grãos
 
 > Documento de registro (exigido pelo edital: *“não é esperado simplesmente entregar o
 > enunciado e deixar a IA fazer”*). Ele demonstra **como a IA foi usada de forma
@@ -132,16 +132,16 @@ e o enum `StatusTransacao` — tudo isso definiu o DDL exato da migração V1.
 
 | Fase | Objetivo | Status (do bank) |
 |---|---|---|
-| 0 | Inicializar `memory-bank` ao escopo real (Balanças de Grãos) | ✅ |
-| 1 | Ajustar `pom.xml` (validation + oauth2-resource-server) | ✅ |
-| 2 | Consolidar config em `application.yaml` (`.properties` removido) | ✅ |
-| 3 | Domain puro (entidades, `AlgoritmoEstabilizacao`, `CalculadoraMargemDinamica`, exceções) + 12 testes unitários | ✅ |
-| 4 | Application (ports in/out, use cases, DTOs records, `EstadoEstabilizacao`) | ✅ |
-| 5 | Adapters (REST, Kafka produtor/consumer, JPA entities+repos+adapters) | ✅ |
-| 6 | Config/Frameworks (Async, Kafka, Security JWT + token, OpenAPI, ExceptionHandler) | ✅ |
-| 7 | **Build**: `./mvnw test` = 17/17 verde; `package` = BUILD SUCCESS | ✅ |
-| 8 | Docker (Dockerfile multi-stage + docker-compose KRaft) | ✅ |
-| **7.1 (ESTA SESSÃO)** | **Migrações versionadas com Flyway** | ✅ |
+| 0 | Inicializar `memory-bank` ao escopo real (Balanças de Grãos) | |
+| 1 | Ajustar `pom.xml` (validation + oauth2-resource-server) | |
+| 2 | Consolidar config em `application.yaml` (`.properties` removido) | |
+| 3 | Domain puro (entidades, `AlgoritmoEstabilizacao`, `CalculadoraMargemDinamica`, exceções) + 12 testes unitários | |
+| 4 | Application (ports in/out, use cases, DTOs records, `EstadoEstabilizacao`) | |
+| 5 | Adapters (REST, Kafka produtor/consumer, JPA entities+repos+adapters) | |
+| 6 | Config/Frameworks (Async, Kafka, Security JWT + token, OpenAPI, ExceptionHandler) | |
+| 7 | **Build**: `./mvnw test` = 17/17 verde; `package` = BUILD SUCCESS | |
+| 8 | Docker (Dockerfile multi-stage + docker-compose KRaft) | |
+| **7.1 (ESTA SESSÃO)** | **Migrações versionadas com Flyway** | |
 
 ## 7. Esta sessão — Flyway: migrações versionadas
 
@@ -169,7 +169,7 @@ perigosa em produção.
    existem no `information_schema`.
 6. **`memory-bank`** → `techContext.md`, `activeContext.md`, `progress.md` atualizados.
 
-### ✅ Resultado verificado
+### Resultado verificado
 ```
 [INFO] Tests run: 19, Failures: 0, Errors: 0, Skipped: 0
 [INFO] BUILD SUCCESS  (Total time: 14.239 s)

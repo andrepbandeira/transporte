@@ -8,6 +8,7 @@ spring:
   threads:
     virtual:
       enabled: true
+      
   application:
     name: transporte-api
   # ===== DEFAULT PROFILE (docker) — PostgreSQL =====
@@ -113,6 +114,10 @@ app:
     window-readings: 5
     max-delta-kg: 5.0
     min-interval-ms: 2000
+    # WeightStabilizationService (algoritmo baseado em buffer deslizante)
+    buffer-size: 20
+    max-variation-kg: 5.0
+    min-truck-weight-kg: 1000.0
   margin:
     min: 0.05
     max: 0.20

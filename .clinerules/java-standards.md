@@ -30,7 +30,7 @@
 - Retorne respostas imutáveis encapsuladas em `ResponseEntity<T>`.
 - Use a validação nativa do Spring (`@Valid`, `@NotNull`, `@Size`, `@NotBlank`) nos DTOs de entrada.
 - Centralize o tratamento de erros globais utilizando um `@RestControllerAdvice` herdando de `ResponseEntityExceptionHandler`.
-- **Novo em Boot 4.x**: Aproveite o suporte a **Virtual Threads** (Project Loom) configurando Tomcat para usar `VirtualThreadExecutor` e melhorar concorrência de I/O.
+- **Novo em Boot 4.x**: Aproveite o suporte a **Virtual Threads** (Project Loom) configurando a aplicação Spring Boot para usar `VirtualThreadExecutor` e melhorar concorrência de I/O.
 
 ### 3. Camada de Persistência (Spring Data JPA)
 - Use métodos derivados de consulta (`findByPlaca`) para buscas simples.

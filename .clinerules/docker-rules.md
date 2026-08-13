@@ -478,7 +478,7 @@ public class PesagemController {
             payload.balancaId(),
             payload.placa(),
             payload.peso(),
-            Instant.now()
+            LocalDateTime.now()
         );
         
         // Envia para Kafka (non-blocking)

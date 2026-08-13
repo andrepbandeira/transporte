@@ -16,10 +16,8 @@ import transporte.desafio.application.ports.out.TransacaoRepositoryPort;
 import transporte.desafio.domain.exception.EntidadeNaoEncontradaException;
 import transporte.desafio.domain.model.*;
 import transporte.desafio.domain.enums.StatusTransacao;
-import transporte.desafio.domain.service.AlgoritmoEstabilizacao;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
@@ -53,15 +51,17 @@ class ProcessarPesagemServiceTest {
     @Mock private DocaRepositoryPort docaRepository;
     @Mock private PesagemRepositoryPort pesagemRepository;
 
+    @Mock private TruckTareService truckTareService;
+
     private ProcessarPesagemService service;
     private TransacaoTransporte transacao;
 
     @BeforeEach
     void setUp() {
-        AlgoritmoEstabilizacao algoritmo = new AlgoritmoEstabilizacao(5, 2.0, 200);
+        WeightStabilizationService stabilizationService = new WeightStabilizationService(5, 5.0, 1000.0);
         service = new ProcessarPesagemService(balancaRepository, transacaoRepository,
                 caminhaoRepository, tipoGraoRepository, docaRepository,
-                pesagemRepository, algoritmo);
+                pesagemRepository, stabilizationService, new ScaleIngestionService(truckTareService));
 
         Balanca balanca = new Balanca(BALANCA_ID, "BAL-001", "secret", "Balanca 1",
                 FILIAL_ID, true, LocalDateTime.now());
@@ -78,14 +78,15 @@ class ProcessarPesagemServiceTest {
         lenient().when(caminhaoRepository.buscarPorId(CAMINHAO_ID)).thenReturn(Optional.of(caminhao));
         lenient().when(tipoGraoRepository.buscarPorId(TIPO_GRAO_ID)).thenReturn(Optional.of(tipoGrao));
         lenient().when(docaRepository.buscarPorTipoGrao(TIPO_GRAO_ID)).thenReturn(Optional.of(doca));
+        lenient().when(truckTareService.getTareByPlate(PLACA)).thenReturn(BigDecimal.valueOf(5000));
     }
 
-    private PesagemEvent evento(Instant t, double peso) {
+    private PesagemEvent evento(LocalDateTime t, double peso) {
         return new PesagemEvent(BALANCA_ID, PLACA, peso, t);
     }
 
-    private Instant base() {
-        return Instant.parse("2026-08-11T10:00:00Z");
+    private LocalDateTime base() {
+        return LocalDateTime.parse("2026-08-11T10:00:00");
     }
 
     @Test
@@ -93,7 +94,7 @@ class ProcessarPesagemServiceTest {
     void rejeitaBalancaNaoCadastrada() {
         when(balancaRepository.buscarPorId(BALANCA_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.processar(evento(base(), 1000.0)))
+        assertThatThrownBy(() -> service.processar(evento(base(), 10000.0)))
                 .isInstanceOf(EntidadeNaoEncontradaException.class);
     }
 
@@ -103,12 +104,12 @@ class ProcessarPesagemServiceTest {
         when(transacaoRepository.buscarTransacaoAtivaPorBalanca(BALANCA_ID))
                 .thenReturn(Optional.of(transacao));
 
-        Instant t = base();
-        service.processar(evento(t.plusMillis(100), 1000.0));
-        service.processar(evento(t.plusMillis(200), 1000.1));
-        service.processar(evento(t.plusMillis(300), 1000.0));
-        service.processar(evento(t.plusMillis(400), 1000.2));
-        service.processar(evento(t.plusMillis(500), 1000.1));
+        LocalDateTime t = base();
+        service.processar(evento(t.plusNanos(100), 10000.0));
+        service.processar(evento(t.plusNanos(200), 10001.0));
+        service.processar(evento(t.plusNanos(300), 10000.0));
+        service.processar(evento(t.plusNanos(400), 10002.0));
+        service.processar(evento(t.plusNanos(500), 10001.0));
 
         verify(pesagemRepository, times(1)).salvar(any(Pesagem.class));
         verify(transacaoRepository, times(1)).salvar(transacao);
@@ -120,27 +121,43 @@ class ProcessarPesagemServiceTest {
         when(transacaoRepository.buscarTransacaoAtivaPorBalanca(BALANCA_ID))
                 .thenReturn(Optional.of(transacao));
 
-        Instant t = base();
-        service.processar(evento(t.plusMillis(100), 1000.0));
-        service.processar(evento(t.plusMillis(200), 1000.1));
-        service.processar(evento(t.plusMillis(300), 1000.0));
-        service.processar(evento(t.plusMillis(400), 1000.2));
-        service.processar(evento(t.plusMillis(500), 1000.1));
+        LocalDateTime t = base();
+        service.processar(evento(t.plusNanos(100), 10000.0));
+        service.processar(evento(t.plusNanos(200), 10001.0));
+        service.processar(evento(t.plusNanos(300), 10000.0));
+        service.processar(evento(t.plusNanos(400), 10002.0));
+        service.processar(evento(t.plusNanos(500), 10001.0));
         verify(pesagemRepository, times(1)).salvar(any(Pesagem.class));
 
-        service.processar(evento(t.plusMillis(600), 1000.3));
-        service.processar(evento(t.plusMillis(700), 1000.2));
+        service.processar(evento(t.plusNanos(600), 10000.0));
+        service.processar(evento(t.plusNanos(700), 10001.0));
         verify(pesagemRepository, times(1)).salvar(any(Pesagem.class));
     }
 
-    @Test
+        @Test
     @DisplayName("ignora leituras quando a transacao ja foi finalizada")
     void ignoraLeiturasQuandoTransacaoJaFinalizada() {
         transacao.finalizar("Pesagem ja concluida");
         when(transacaoRepository.buscarTransacaoAtivaPorBalanca(BALANCA_ID))
                 .thenReturn(Optional.of(transacao));
 
-        service.processar(evento(base(), 1000.0));
+        service.processar(evento(base(), 10000.0));
+
+        verify(pesagemRepository, never()).salvar(any(Pesagem.class));
+        verify(transacaoRepository, never()).salvar(any(TransacaoTransporte.class));
+    }
+
+    @Test
+    @DisplayName("descarta leituras abaixo de tara * 0.90 seguindo a logica do ScaleIngestionService")
+    void descartaLeiturasAbaixoDaTaraMinimaDoScaleIngestionService() {
+        // tara do caminhao = 5000 -> tara * 0.90 = 4500 (logica do ScaleIngestionService)
+        when(transacaoRepository.buscarTransacaoAtivaPorBalanca(BALANCA_ID))
+                .thenReturn(Optional.of(transacao));
+
+        // peso 4000 < 4500 -> descartado pelo gate de tara, sem chegar a estabilizacao
+        service.processar(evento(base().plusNanos(100), 4000.0));
+        service.processar(evento(base().plusNanos(200), 4001.0));
+        service.processar(evento(base().plusNanos(300), 4002.0));
 
         verify(pesagemRepository, never()).salvar(any(Pesagem.class));
         verify(transacaoRepository, never()).salvar(any(TransacaoTransporte.class));

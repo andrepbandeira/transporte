@@ -3,6 +3,8 @@ package transporte.desafio.application.service;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import transporte.desafio.application.dto.PesagemEvent;
+import transporte.desafio.application.dto.ScaleStabilizedEvent;
+import transporte.desafio.application.dto.WeightReadingDto;
 import transporte.desafio.application.ports.in.ProcessarPesagemUseCase;
 import transporte.desafio.application.ports.out.BalancaRepositoryPort;
 import transporte.desafio.application.ports.out.CaminhaoRepositoryPort;
@@ -10,27 +12,22 @@ import transporte.desafio.application.ports.out.DocaRepositoryPort;
 import transporte.desafio.application.ports.out.PesagemRepositoryPort;
 import transporte.desafio.application.ports.out.TipoGraoRepositoryPort;
 import transporte.desafio.application.ports.out.TransacaoRepositoryPort;
-import transporte.desafio.domain.exception.BalancaNaoAutorizadaException;
+import transporte.desafio.domain.enums.StatusPesagem;
+import transporte.desafio.domain.enums.StatusTransacao;
 import transporte.desafio.domain.exception.EntidadeNaoEncontradaException;
 import transporte.desafio.domain.model.Balanca;
 import transporte.desafio.domain.model.Caminhao;
 import transporte.desafio.domain.model.Doca;
-import transporte.desafio.domain.model.LeituraPeso;
 import transporte.desafio.domain.model.Pesagem;
-import transporte.desafio.domain.enums.StatusPesagem;
-import transporte.desafio.domain.enums.StatusTransacao;
 import transporte.desafio.domain.model.TipoGrao;
 import transporte.desafio.domain.model.TransacaoTransporte;
-import transporte.desafio.domain.service.AlgoritmoEstabilizacao;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @Slf4j
@@ -42,9 +39,8 @@ public class ProcessarPesagemService implements ProcessarPesagemUseCase {
     private final TipoGraoRepositoryPort tipoGraoRepository;
     private final DocaRepositoryPort docaRepository;
     private final PesagemRepositoryPort pesagemRepository;
-    private final AlgoritmoEstabilizacao algoritmo;
-
-    private final Map<String, EstadoEstabilizacao> estados = new ConcurrentHashMap<>();
+    private final WeightStabilizationService weightStabilizationService;
+    private final ScaleIngestionService scaleIngestionService;
 
     public ProcessarPesagemService(
             BalancaRepositoryPort balancaRepository,
@@ -53,22 +49,23 @@ public class ProcessarPesagemService implements ProcessarPesagemUseCase {
             TipoGraoRepositoryPort tipoGraoRepository,
             DocaRepositoryPort docaRepository,
             PesagemRepositoryPort pesagemRepository,
-            AlgoritmoEstabilizacao algoritmo) {
+            WeightStabilizationService weightStabilizationService,
+            ScaleIngestionService scaleIngestionService) {
         this.balancaRepository = balancaRepository;
         this.transacaoRepository = transacaoRepository;
         this.caminhaoRepository = caminhaoRepository;
         this.tipoGraoRepository = tipoGraoRepository;
         this.docaRepository = docaRepository;
         this.pesagemRepository = pesagemRepository;
-        this.algoritmo = algoritmo;
+        this.weightStabilizationService = weightStabilizationService;
+        this.scaleIngestionService = scaleIngestionService;
     }
 
     @Override
     public void processar(PesagemEvent event) {
         UUID balancaId = event.balancaId();
         String placa = event.placa();
-        double pesoAtual = event.pesoAtual();
-        java.time.Instant instante = event.instante();
+        double pesoAtual = event.pesoAtual() != null ? event.pesoAtual() : 0.0;
 
         log.debug("Processando leitura: balanca={}, placa={}, peso={}", balancaId, placa, pesoAtual);
 
@@ -76,7 +73,8 @@ public class ProcessarPesagemService implements ProcessarPesagemUseCase {
                 .orElseThrow(() -> new EntidadeNaoEncontradaException("Balanca", balancaId));
 
         if (!Boolean.TRUE.equals(balanca.getAtiva())) {
-            throw new BalancaNaoAutorizadaException("Balanca inativa: " + balanca.getCodigo());
+            log.warn("Leitura ignorada: balanca {} esta inativa", balancaId);
+            return;
         }
 
         TransacaoTransporte transacao = transacaoRepository.buscarTransacaoAtivaPorBalanca(balancaId)
@@ -88,35 +86,46 @@ public class ProcessarPesagemService implements ProcessarPesagemUseCase {
             return;
         }
 
-        String chave = chaveEstado(balancaId, placa);
-        EstadoEstabilizacao estado = estados.computeIfAbsent(chave, k -> new EstadoEstabilizacao(algoritmo));
+        // Tara do caminhao vinculado a transacao (necessaria para persistencia).
+        // O gate de tara (abaixo) agora usa lookup por placa via cache "truck-tares"
+        // dentro do proprio ScaleIngestionService -> TruckTareService.
+        Caminhao caminhao = caminhaoRepository.buscarPorId(transacao.getCaminhaoId())
+                .orElseThrow(() -> new EntidadeNaoEncontradaException("Caminhao", transacao.getCaminhaoId()));
 
-        LeituraPeso leitura = new LeituraPeso(instante, pesoAtual);
-        boolean estabilizado = estado.adicionarLeitura(leitura, placa);
+        WeightReadingDto reading = new WeightReadingDto(
+                balancaId.toString(),
+                placa,
+                BigDecimal.valueOf(pesoAtual)
+        );
 
-        if (estabilizado) {
-            persistirPesagem(transacao, balanca, estado, placa);
-            estado.reset();
+        // Gate de tara (ScaleIngestionService): descarta leituras abaixo de tara * fator.
+        // A tara e resolvida internamente via cache "truck-tares" (TruckTareService).
+        if (!scaleIngestionService.isReadingValid(reading)) {
+            log.debug("Leitura descartada pelo gate de tara: placa={}, peso={}", placa, pesoAtual);
+            return;
+        }
+
+        Optional<ScaleStabilizedEvent> stabilizedOpt = weightStabilizationService.processReading(reading);
+
+        if (stabilizedOpt.isPresent()) {
+            ScaleStabilizedEvent stabilizedEvent = stabilizedOpt.get();
+            persistirPesagem(transacao, balanca, caminhao, stabilizedEvent.averageWeight(), placa);
         }
     }
+
     private void persistirPesagem(TransacaoTransporte transacao, Balanca balanca,
-                                  EstadoEstabilizacao estado, String placa) {
-        UUID caminhaoId = transacao.getCaminhaoId();
+                                  Caminhao caminhao, BigDecimal pesoBrutoBd, String placa) {
         UUID tipoGraoId = transacao.getTipoGraoId();
 
-        Caminhao caminhao = caminhaoRepository.buscarPorId(caminhaoId)
-                .orElseThrow(() -> new EntidadeNaoEncontradaException("Caminhao", caminhaoId));
         TipoGrao tipoGrao = tipoGraoRepository.buscarPorId(tipoGraoId)
                 .orElseThrow(() -> new EntidadeNaoEncontradaException("TipoGrao", tipoGraoId));
 
-        BigDecimal pesoBrutoBd = BigDecimal.valueOf(estado.getPesoEstabilizado())
-                .setScale(2, RoundingMode.HALF_UP);
         BigDecimal tara = caminhao.getTara();
         BigDecimal pesoLiquido = pesoBrutoBd.subtract(tara).max(BigDecimal.ZERO);
         BigDecimal custoCarga = calcularCustoCarga(pesoLiquido, tipoGrao.getPrecoCompraPorTonelada());
 
         Pesagem pesagem = new Pesagem(
-                UUID.randomUUID(), transacao.getId(), balanca.getId(), caminhaoId,
+                UUID.randomUUID(), transacao.getId(), balanca.getId(), caminhao.getId(),
                 tipoGraoId, placa != null ? placa : "", pesoBrutoBd, pesoLiquido,
                 LocalDateTime.now(ZoneId.of("America/Sao_Paulo")), custoCarga,
                 StatusPesagem.ESTABILIZADA, "Pesagem estabilizada automaticamente",
@@ -137,7 +146,6 @@ public class ProcessarPesagemService implements ProcessarPesagemUseCase {
         Optional<Doca> optDoca = docaRepository.buscarPorTipoGrao(tipoGraoId);
         if (optDoca.isPresent()) {
             Doca doca = optDoca.get();
-            // Pesagem estabilizada = chegada de grao na doca -> aumenta o saldo disponivel
             doca.adicionarEstoque(pesoLiquidoKg);
             docaRepository.salvar(doca);
             log.debug("Doca atualizada: tipoGrao={}, saldo={}", tipoGraoId, doca.getPesoDisponivel());
@@ -149,12 +157,8 @@ public class ProcessarPesagemService implements ProcessarPesagemUseCase {
                 .multiply(precoCompraPorTonelada).setScale(2, RoundingMode.HALF_UP);
     }
 
-    private String chaveEstado(UUID balancaId, String placa) {
-        return balancaId.toString() + ":" + (placa != null ? placa : "");
-    }
-
     public void clearEstados() {
-        estados.clear();
+        weightStabilizationService.clearBuffers();
     }
 }
 

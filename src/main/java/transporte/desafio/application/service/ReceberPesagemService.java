@@ -8,7 +8,7 @@ import transporte.desafio.application.dto.PesagemRequest;
 import transporte.desafio.application.ports.in.ReceberPesagemUseCase;
 import transporte.desafio.application.ports.out.PesagemProducerPort;
 
-import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
@@ -36,7 +36,7 @@ public class ReceberPesagemService implements ReceberPesagemUseCase {
                     balancaId,
                     request.plate(),
                     request.weight(),
-                    Instant.now());
+                    LocalDateTime.now());
 
             // Envia ao Kafka (fire-and-forget)
             producer.enviar(event);
